@@ -1,0 +1,6 @@
+{
+    "editor.linkedEditing": true,
+    "liveServer.settings.port": 8000,
+    "editor.snippetSuggestions": "inline",
+    "css-auto-prefix.enabled": false
+}
