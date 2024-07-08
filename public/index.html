@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gemini Detector</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background-color: #121212;
+      color: #FFFFFF;
+      font-family: Arial, sans-serif;
+      flex-direction: column;
+    }
+    #startBtn {
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #6200EE;
+      color: #FFFFFF;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-bottom: 20px;
+    }
+    #startBtn:hover {
+      background-color: #3700B3;
+    }
+    #videoContainer {
+      margin-top: 20px;
+      width: 560px;
+      height: 315px;
+    }
+  </style>
+</head>
+<body>
+  <button id="startBtn">Activate</button>
+  <div id="log"></div>
+  <div id="videoContainer"></div>
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script>
+    const name = "computer"
+    const startBtn = document.getElementById("startBtn");
+    const log = document.getElementById("log");
+    const videoContainer = document.getElementById("videoContainer");
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let listening = false;
+
+    const hardCoded = {
+      stopMusic: ["pause", "stop", "pause the music", "stop the music", "shut up"],
+      resumeMusic: ["play", "keep playing", "continue", "keep playing", "resume", "start"],
+      time: ["what's the time", "time", "what is the time", "what is the time right now", "what's the time right now"],
+      date: ["what's the date", "what's the date today", "date", "what is the date", "what is the date today", "what is the date right now", "what day is it", "what day is it today", "what day of the week is it", "what is the day of the week"]
+    }
+
+    if (typeof SpeechRecognition !== "undefined") {
+      recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      recognition.onresult = event => {
+        const current = event.resultIndex;
+        const recognitionResult = event.results[current];
+        const recognitionText = recognitionResult[0].transcript.toLowerCase().trim();
+
+        if (!recognitionResult.isFinal && recognitionText.startsWith(name)) {
+          try {
+            video.setVolume(10)
+          } catch {}
+        }
+
+        if (recognitionResult.isFinal && recognitionText.startsWith(name)) {
+          const query = recognitionText.replace(name, "").trim();
+          console.log(query);
+
+
+          if (hardCoded.stopMusic.includes(query)) {
+            video.pauseVideo()
+            return
+          }
+          if (hardCoded.resumeMusic.includes(query)) {
+            video.playVideo()
+            video.setVolume(100)
+            return
+          }
+          if (hardCoded.time.includes(query)) {
+            speakResponse("It's " + (new Date()).toLocaleString('en-GB', { hour: 'numeric', minute: 'numeric', hour12: true }));
+            return
+          }
+          if (hardCoded.date.includes(query)) {
+            const date = new Date();
+            const day = date.getDate();
+            const suffix = day % 10 === 1 && day !== 11 ? 'st' : day % 10 === 2 && day !== 12 ? 'nd' : day % 10 === 3 && day !== 13 ? 'rd' : 'th';
+            speakResponse("It's " + date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).replace(day, "the " + day + suffix + " of"))
+            return
+          }
+
+          fetch('/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query })
+          })
+          .then(response => response.json())
+          .then(data => {
+            console.log(data.response);
+
+            detect = data.response.split("%%");
+            if (detect.length > 1) {
+              const videoID = detect[5];
+              detect[5] = "";
+              data.response = detect.join("");
+              loadYoutubeVideo(videoID);
+            }
+
+            detect = data.response.split("¬¬");
+            if (detect.length > 1) {
+              const videoID = detect[3];
+              detect[3] = "";
+              data.response = detect.join("");
+              loadYoutubeVideo(videoID);
+            }
+
+            speakResponse((data.response).trim());
+          })
+          .catch(error => {
+            console.error('Error:', error);
+          });
+        }
+      };
+
+      startBtn.addEventListener("click", () => {
+        if (!listening) {
+          recognition.start();
+          startBtn.textContent = "Listening...";
+          listening = true;
+          setInterval(function() {
+            try {
+              recognition.start();
+            } catch { }
+          }, 1000);
+        }
+      });
+    } else {
+      startBtn.remove();
+      log.innerHTML = "<strong>Your browser does not support Speech API. Please download the latest Chrome version.<strong>";
+    }
+
+    async function speakResponse(responseText) {
+      window.speechSynthesis.cancel();
+      const synth = window.speechSynthesis;
+      const utterance = new SpeechSynthesisUtterance(responseText);
+      utterance.lang = 'en-US';
+      await synth.speak(utterance);
+      try {
+        video.setVolume(100)
+      } catch {}
+    }
+
+    let video;
+
+    function loadYoutubeVideo(videoID) {
+        try {
+          video.destroy()
+          video = null
+        } catch {}
+        video = new YT.Player('videoContainer', {
+          height: '315',
+          width: '560',
+          videoId: videoID,
+          events: {
+            'onReady': onPlayerReady,
+            'onStateChange': onPlayerStateChange
+          }
+        });
+    }
+
+    function onPlayerReady(event) {
+      event.target.playVideo();
+    }
+
+    function onPlayerStateChange(event) {
+      if (event.data == YT.PlayerState.ENDED) {
+        video.playNext()
+      }
+    }
+  </script>
+</body>
+</html>
